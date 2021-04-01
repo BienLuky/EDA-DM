@@ -72,6 +72,12 @@ python ./scripts/sample_txt2img.py --prompt "a puppy wearing a hat" --from-file 
 ```
 where <model_ckpt_path> and <dataset_path> replace the downloaded full-precision model checkpoints and dataset, respectively.
 
+## EDA-DM Weights
+
+| Model | Dataset | Link |
+| ------- | ------- |------- |
+|  LDM-4  | ImageNet|https://drive.google.com/file/d/1xqkm7hcuOfMby0VhMIZcY3iOkDfnFmaG/view?usp=drive_link|
+
 ## Citation
 
 If you find this work useful in your research, please consider citing our paper:
