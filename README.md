@@ -74,10 +74,12 @@ where <model_ckpt_path> and <dataset_path> replace the downloaded full-precision
 
 ## EDA-DM Weights
 
-| Model | Dataset | Link |
-| ------- | ------- |------- |
-|  LDM-4  | ImageNet|https://drive.google.com/file/d/1xqkm7hcuOfMby0VhMIZcY3iOkDfnFmaG/view?usp=drive_link|
+| Model | Dataset | Prec. | Link |
+| ------- | ------- |------- |------- |
+|  DDIM  | CIFAR-10 | W4A8 | [link](https://drive.google.com/file/d/1C7K3VbhkB-GKbI33cvoPBqRKYWBYb0RC/view?usp=drive_link) |
+|  LDM-4  | ImageNet | W4A8 | [link](https://drive.google.com/file/d/1xqkm7hcuOfMby0VhMIZcY3iOkDfnFmaG/view?usp=drive_link) |
 
+Due to the space limitations of Google Drive we only provide partial weights.
 ## Citation
 
 If you find this work useful in your research, please consider citing our paper:
