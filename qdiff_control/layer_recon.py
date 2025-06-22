@@ -15,7 +15,7 @@ def layer_reconstruction(model: QuantModel, layer: QuantModule, cali_data: torch
                          asym: bool = False, b_range: tuple = (20, 2),
                          warmup: float = 0.0, act_quant: bool = False, lr_a: float = 4e-5, lr_w=1e-2, p: float = 2.0,
                          input_prob: float = 1.0, keep_gpu: bool = True, 
-                         recon_w: bool = False, recon_a: bool = False, add_loss: float = 0.0, change_block: bool = False):
+                         recon_w: bool = False, recon_a: bool = False, add_loss: float = 0.0):
     """
     Block reconstruction to optimize the output from each layer.
 
@@ -37,7 +37,6 @@ def layer_reconstruction(model: QuantModel, layer: QuantModule, cali_data: torch
     """
 
     '''set state'''                                    
-    # model.set_quant_state(False, False)
     layer.set_quant_state(True, act_quant)
     round_mode = 'learned_hard_sigmoid'
 
@@ -66,7 +65,6 @@ def layer_reconstruction(model: QuantModel, layer: QuantModule, cali_data: torch
         a_opt = torch.optim.Adam(a_para, lr=lr_a)
         a_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(a_opt, T_max=iters, eta_min=0.)
 
-    # loss_mode = 'relaxation'
     loss_mode = 'none'
     rec_loss = opt_mode
     loss_func = LossFunction(layer, round_loss=loss_mode, weight=weight,
@@ -75,25 +73,13 @@ def layer_reconstruction(model: QuantModel, layer: QuantModule, cali_data: torch
 
     '''get input and set scale'''
     Resblock, cached_inps, cached_outs = save_inp_oup_data(model, layer, cali_data, asym, act_quant, batch_size=batch_size, input_prob=True, keep_gpu=keep_gpu)
-    # set_act_quantize_params(layer, cali_data=cached_inps[0][:min(256, cached_inps[0].size(0))], act_quant=act_quant)
-
-    # if opt_mode != 'mse':
-    #     cached_grads = save_grad_data(model, layer, cali_data, act_quant, batch_size=batch_size)
-    # else:
-    #     cached_grads = None
 
     device = 'cuda'
-    # sz = cached_inps[0].size(0)
     sz = cached_outs.size(0)
     model.block_count = model.block_count + 1
-    out_loss_list = []
-    # batch_size = 256
     for i in range(iters):
-        # idx = torch.randint(0, sz, (batch_size,))
         idx = random.sample(range(sz), batch_size)
-        # cur_inp = cached_inps[idx].to(device)
         cur_out = cached_outs[idx].to(device)
-        cur_grad = cached_grads[idx] if opt_mode != 'mse' else None
         cur_inp, cur_sym = cached_inps[0][idx].to(device), cached_inps[1][idx].to(device)
         if input_prob < 1.0:
             cur_inp = torch.where(torch.rand_like(cur_inp) < input_prob, cur_inp, cur_sym)
@@ -102,11 +88,10 @@ def layer_reconstruction(model: QuantModel, layer: QuantModule, cali_data: torch
             w_opt.zero_grad()
         if a_opt:
             a_opt.zero_grad()
+
         out_quant = layer(cur_inp)
 
         loss = loss_func(out_quant, cur_out)
-        out_loss_list.append(loss.cpu().detach().numpy())
-        # if layer.disable_act_quant == False:
         loss.backward()#retain_graph=True
 
         if w_opt:
@@ -118,23 +103,10 @@ def layer_reconstruction(model: QuantModel, layer: QuantModule, cali_data: torch
         if a_scheduler:
             a_scheduler.step()
     torch.cuda.empty_cache()
-    if add_loss != 0:
-        road = "/home/liuxuewen/Dome/q-diffusion/result/add_loss/"
-    else:
-        road = "/home/liuxuewen/Dome/q-diffusion/result/no_add_loss/"
-    if change_block:
-        road = "/home/liuxuewen/Dome/q-diffusion/result/change_block/"
-    else:
-        road = "/home/liuxuewen/Dome/q-diffusion/result/no_change_block/"
-    x = range(len(out_loss_list))
-    f = plt.figure()
-    plt.plot(x, out_loss_list)
-    plt.savefig(road + f"outloss_{model.block_count}.png")
 
     layer.weight_quantizer.soft_targets = False
     layer.act_quantizer.is_training = False
 
-    # return 0
 
 class LossFunction:
     def __init__(self,

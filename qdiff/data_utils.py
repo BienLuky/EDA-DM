@@ -6,14 +6,6 @@ from .quant_block import BaseQuantBlock
 
 def save_inp_oup_data(model: QuantModel, layer: Union[QuantModule, BaseQuantBlock], cali_data: torch.Tensor,
                       asym: bool = False, act_quant: bool = False, batch_size: int = 32, input_prob: bool = False, keep_gpu: bool = True):
-# def save_inp_oup_data(
-#     model: QuantModel,
-#     layer: Union[QuantModule, BaseQuantBlock],
-#     cali_data: torch.Tensor,
-#     batch_size: int = 32,
-#     keep_gpu: bool = True,
-#     input_prob: bool = False,
-# ):
     """
     Save input data and output data of a particular layer/block over calibration dataset.
 
@@ -53,10 +45,7 @@ def save_inp_oup_data(model: QuantModel, layer: Union[QuantModule, BaseQuantBloc
                 temb_cached_batches.append((cur_inp[1].cpu()))
             else:
                 cached_batches.append((cur_inp.cpu(), cur_out.cpu()))
-        # cur_inp, cur_out = get_inp_out(
-        #     [_[i * batch_size : (i + 1) * batch_size] for _ in cali_data]
-        # )
-        # cached_batches.append((cur_inp.cpu(), cur_out.cpu()))
+
     cached_inps = torch.cat([x[0] for x in cached_batches])
     cached_outs = torch.cat([x[1] for x in cached_batches])
     if Resblock:
@@ -84,14 +73,12 @@ def save_inp_oup_data(model: QuantModel, layer: Union[QuantModule, BaseQuantBloc
         return Resblock, ([cached_inps, temb_cached_inps]), cached_outs
     else:
         return Resblock, (cached_inps,), cached_outs
-    # return cached_inps, cached_outs
 
 
 class StopForwardException(Exception):
     """
     Used to throw and catch an exception to stop traversing the graph
     """
-
     pass
 
 

@@ -15,7 +15,7 @@ def block_reconstruction(model: QuantModel, block: BaseQuantBlock, cali_data: to
                          asym: bool = False, b_range: tuple = (20, 2),
                          warmup: float = 0.0, act_quant: bool = False, lr_a: float = 4e-5, lr_w=1e-2, p: float = 2.0,
                          input_prob: float = 1.0, keep_gpu: bool = True, 
-                         recon_w: bool = False, recon_a: bool = False, add_loss: float = 0.0, change_block: bool = False):
+                         recon_w: bool = False, recon_a: bool = False, add_loss: float = 0.0):
     """
     Block reconstruction to optimize the output from each block.
 
@@ -36,7 +36,6 @@ def block_reconstruction(model: QuantModel, block: BaseQuantBlock, cali_data: to
     """
 
     '''set state'''                                    
-    # model.set_quant_state(False, False)
     block.set_quant_state(True, act_quant)
     round_mode = 'learned_hard_sigmoid'
     hooks = []
@@ -107,7 +106,6 @@ def block_reconstruction(model: QuantModel, block: BaseQuantBlock, cali_data: to
                         a_para += [module.act_quantizer_0.delta]
                         module.act_quantizer.is_training = True
                         module.act_quantizer_0.is_training = True
-        
 
     w_opt, a_opt = None, None
     a_scheduler, w_scheduler = None, None
@@ -118,34 +116,23 @@ def block_reconstruction(model: QuantModel, block: BaseQuantBlock, cali_data: to
         a_opt = torch.optim.Adam(a_para, lr=lr_a)
         a_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(a_opt, T_max=iters, eta_min=0.)
 
-    # loss_mode = 'relaxation'
     loss_mode = 'none'
     rec_loss = opt_mode
     loss_func = LossFunction(block, round_loss=loss_mode, weight=weight,
                              max_count=iters, rec_loss=rec_loss, b_range=b_range,
                              decay_start=0, warmup=warmup, p=p)
 
-
     '''get input and set scale'''
     Resblock, cached_inps, cached_outs = save_inp_oup_data(model, block, cali_data, asym, act_quant, batch_size=32, input_prob=True, keep_gpu=keep_gpu)
 
-    # if opt_mode != 'mse':
-    #     cached_grads = save_grad_data(model, block, cali_data, act_quant, batch_size=batch_size)
-    # else:
-    #     cached_grads = None
-
     device = 'cuda'
-    # sz = cached_inps.size(0)
     sz = cached_outs.size(0)
     model.block_count = model.block_count + 1
     module_loss_list = []
     out_loss_list = []
-    # batch_size = 256
     for i in range(iters):
         idx = random.sample(range(sz), batch_size)
-        # cur_inp = cached_inps[idx].to(device)
         cur_out = cached_outs[idx].to(device)
-        # cur_grad = cached_grads[idx] if opt_mode != 'mse' else None
         if Resblock:
             cur_inp, cur_sym = cached_inps[0][0][idx].to(device), cached_inps[1][0][idx].to(device)
             temb_cur_inp, temb_cur_sym = cached_inps[0][1][idx].to(device), cached_inps[1][1][idx].to(device)
@@ -240,6 +227,7 @@ def block_reconstruction(model: QuantModel, block: BaseQuantBlock, cali_data: to
             module.attention.qkv_matmul.act_quantizer_k.is_training = False
             module.attention.smv_matmul.act_quantizer_v.is_training = False
             module.attention.smv_matmul.act_quantizer_w.is_training = False
+            
     for hook in hooks:
         hook.remove()
 

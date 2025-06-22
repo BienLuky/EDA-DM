@@ -1,4 +1,4 @@
 from qdiff_control.set_quantize_params_Stable import set_weight_quantize_params_Stable, set_act_quantize_params_Stable
 from qdiff_control.coco_prompt import get_prompts, center_resize_image
-from qdiff_control.recon_Qmodel import recon_Qmodel
+from qdiff_control.recon_block_Qmodel import recon_block_Qmodel
 from qdiff_control.set_quantize_params_Conditional import set_weight_quantize_params_Conditional, set_act_quantize_params_Conditional

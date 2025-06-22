@@ -49,10 +49,7 @@ class UniformAffineQuantizer(nn.Module):
                  leaf_param: bool = False, always_zero: bool = False, prob: float = 1.0):
         super(UniformAffineQuantizer, self).__init__()
         self.sym = symmetric
-        # assert 2 <= n_bits <= 8, 'bitwidth not supported'
-        self.n_bits = n_bits
-        # self.n_levels = 2 ** self.n_bits if not self.sym else 2 ** (self.n_bits - 1) - 1
-        self.n_levels = 2 ** self.n_bits
+        self.bitwidth_refactor(n_bits)
         self.delta = None
         self.zero_point = None
         self.inited = False
@@ -78,6 +75,7 @@ class UniformAffineQuantizer(nn.Module):
 
     def set_inited(self, inited: bool = True):  # inited manually
         self.inited = inited
+
     def update_quantize_range(self, x_min, x_max):
         if self.running_min is None:
             self.running_min = x_min
@@ -85,6 +83,7 @@ class UniformAffineQuantizer(nn.Module):
         self.running_min = 0.1 * x_min + 0.9 * self.running_min
         self.running_max = 0.1 * x_max + 0.9 * self.running_max
         return self.running_min, self.running_max
+
     def lp_loss(self, pred, tgt, p=2.0):
         x = (pred - tgt).abs().pow(p)
         if not self.channel_wise:
@@ -92,6 +91,7 @@ class UniformAffineQuantizer(nn.Module):
         else:
             y = torch.flatten(x, 1)
             return y.mean(1)
+
     def calculate_qparams(self, min_val, max_val):
         # one_dim or one element
         quant_min, quant_max = 0, self.n_levels - 1
@@ -115,8 +115,6 @@ class UniformAffineQuantizer(nn.Module):
         x_int = torch.round(x / delta)
         x_quant = torch.clamp(x_int + zero_point, 0, self.n_levels - 1)
         x_float_q = (x_quant - zero_point) * delta
-        # if zero_point.ndim == 0:
-        #     print(delta, zero_point)
         return x_float_q
 
     def perform_2D_search(self, x):
@@ -218,12 +216,8 @@ class UniformAffineQuantizer(nn.Module):
         if self.scale_method != "mse":
             raise NotImplementedError
         if self.one_side_dist is None:
-            self.one_side_dist = (
-                "pos" if x.min() >= 0.0 else "neg" if x.max() <= 0.0 else "no"
-            )
-        if (
-            self.one_side_dist != "no" or self.sym
-        ):  # one-side distribution or symmetric value for 1-d search
+            self.one_side_dist = ("pos" if x.min() >= 0.0 else "neg" if x.max() <= 0.0 else "no")
+        if (self.one_side_dist != "no" or self.sym):  # one-side distribution or symmetric value for 1-d search
             best_min, best_max = self.perform_1D_search(x)
         else:  # 2-d search
             best_min, best_max = self.perform_2D_search(x)
@@ -237,9 +231,7 @@ class UniformAffineQuantizer(nn.Module):
             scale, zero_point = self.calculate_qparams(x_min, x_max)
         return scale, zero_point
 
-    def init_quantization_scale_1(
-        self, x_clone: torch.Tensor, channel_wise: bool = False
-    ):
+    def init_quantization_scale_1(self, x_clone: torch.Tensor, channel_wise: bool = False):
         if channel_wise:
             # determine the scale and zero point channel-by-channel
             delta, zero_point = self.init_quantization_scale_channel(x_clone)
@@ -250,8 +242,8 @@ class UniformAffineQuantizer(nn.Module):
         else:
             delta, zero_point = self.init_quantization_scale_channel(x_clone)
         return delta, zero_point
-    def forward(self, x: torch.Tensor):
 
+    def forward(self, x: torch.Tensor):
         if self.inited is False:
             if self.leaf_param:
                 if self.scale_method == 'mse':
@@ -271,17 +263,8 @@ class UniformAffineQuantizer(nn.Module):
                     raise NotImplementedError
             # self.inited = True
 
-        if self.running_stat:
-            self.act_momentum_update(x)
-
         # start quantization
-        # print(f"x shape {x.shape} delta shape {self.delta.shape} zero shape {self.zero_point.shape}")
         x_int = round_ste(x / self.delta) + self.zero_point
-        x_quant = torch.clamp(x_int, 0, self.n_levels - 1)
-        # if self.sym:
-        #     x_quant = torch.clamp(x_int, -self.n_levels - 1, self.n_levels)
-        # else:
-        #     x_quant = torch.clamp(x_int, 0, self.n_levels - 1)
         x_quant = torch.clamp(x_int, 0, self.n_levels - 1)
         x_dequant = (x_quant - self.zero_point) * self.delta
 
@@ -289,6 +272,7 @@ class UniformAffineQuantizer(nn.Module):
             x_ans = torch.where(torch.rand_like(x) < self.prob, x_dequant, x)
         else:
             x_ans = x_dequant
+
         return x_ans
 
     def init_quantization_scale_2(self, x: torch.Tensor, channel_wise: bool = False):
@@ -362,15 +346,6 @@ class UniformAffineQuantizer(nn.Module):
 
         return delta, zero_point
 
-    # def quantize(self, x, max, min):
-    #     delta = (max - min) / (2 ** self.n_bits - 1) if not self.always_zero else max / (2 ** self.n_bits - 1)
-    #     zero_point = (- min / delta).round() if not self.always_zero else 0
-    #     # we assume weight quantization is always signed
-    #     x_int = torch.round(x / delta)
-    #     x_quant = torch.clamp(x_int + zero_point, 0, self.n_levels - 1)
-    #     x_float_q = (x_quant - zero_point) * delta
-    #     return x_float_q
-
     def bitwidth_refactor(self, refactored_bit: int):
         # assert 2 <= refactored_bit <= 8, 'bitwidth not supported'
         self.n_bits = refactored_bit
@@ -403,6 +378,7 @@ class QuantModule(nn.Module):
         else:
             self.fwd_kwargs = dict()
             self.fwd_func = F.linear
+
         self.weight = org_module.weight
         self.org_weight = org_module.weight.data.clone()
         if org_module.bias is not None:
@@ -411,10 +387,10 @@ class QuantModule(nn.Module):
         else:
             self.bias = None
             self.org_bias = None
+
         # de-activate the quantized forward default
         self.use_weight_quant = False
         self.use_act_quant = False
-        self.can_recon = True
         self.act_quant_mode = act_quant_mode
         self.disable_act_quant = disable_act_quant
         # initialize quantizer
@@ -425,7 +401,6 @@ class QuantModule(nn.Module):
 
         self.activation_function = StraightThrough()
         self.ignore_reconstruction = False
-
         self.extra_repr = org_module.extra_repr
 
     def forward(self, input: torch.Tensor, split: int = 0):
@@ -469,9 +444,3 @@ class QuantModule(nn.Module):
         self.weight_quantizer_0 = UniformAffineQuantizer(**self.weight_quant_params)
         if self.act_quant_mode == 'qdiff':
             self.act_quantizer_0 = UniformAffineQuantizer(**self.act_quant_params)
-
-    def set_running_stat(self, running_stat: bool):
-        if self.act_quant_mode == 'qdiff':
-            self.act_quantizer.running_stat = running_stat
-            if self.split != 0:
-                self.act_quantizer_0.running_stat = running_stat

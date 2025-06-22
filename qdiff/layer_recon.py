@@ -15,7 +15,7 @@ def layer_reconstruction(model: QuantModel, layer: QuantModule, cali_data: torch
                          asym: bool = False, b_range: tuple = (20, 2),
                          warmup: float = 0.0, act_quant: bool = False, lr_a: float = 4e-5, lr_w=1e-2, p: float = 2.0,
                          input_prob: float = 1.0, keep_gpu: bool = True, 
-                         recon_w: bool = False, recon_a: bool = False, add_loss: float = 0.0, change_block: bool = False):
+                         recon_w: bool = False, recon_a: bool = False, add_loss: float = 0.0):
     """
     Block reconstruction to optimize the output from each layer.
 
@@ -37,7 +37,6 @@ def layer_reconstruction(model: QuantModel, layer: QuantModule, cali_data: torch
     """
 
     '''set state'''                                    
-    # model.set_quant_state(False, False)
     layer.set_quant_state(True, act_quant)
     round_mode = 'learned_hard_sigmoid'
 
@@ -45,11 +44,6 @@ def layer_reconstruction(model: QuantModel, layer: QuantModule, cali_data: torch
     # Replace weight quantizer to AdaRoundQuantizer
     w_para, a_para = [], []
     '''weight'''
-    # layer.weight_quantizer = AdaRoundQuantizer(uaq=layer.weight_quantizer, round_mode=round_mode,
-    #                                            weight_tensor=layer.org_weight.data)
-    # if recon_w:
-    #     layer.weight_quantizer.soft_targets = True
-    #     w_para += [layer.weight_quantizer.alpha]
     if layer.split == 0:
         layer.weight_quantizer = AdaRoundQuantizer(uaq=layer.weight_quantizer, round_mode=round_mode,
                                                     weight_tensor=layer.org_weight.data)
@@ -67,11 +61,6 @@ def layer_reconstruction(model: QuantModel, layer: QuantModule, cali_data: torch
             w_para += [layer.weight_quantizer.alpha]
             w_para += [layer.weight_quantizer_0.alpha]
     '''activation'''
-    # if act_quant and layer.act_quantizer.delta is not None:
-    #     layer.act_quantizer.delta = torch.nn.Parameter(torch.tensor(layer.act_quantizer.delta))
-    #     if recon_a:
-    #         a_para += [layer.act_quantizer.delta]
-    #         layer.act_quantizer.is_training = True
     if act_quant and layer.act_quantizer.delta is not None:
         if layer.split == 0:
             layer.act_quantizer.delta = torch.nn.Parameter(torch.tensor(layer.act_quantizer.delta))
@@ -86,6 +75,7 @@ def layer_reconstruction(model: QuantModel, layer: QuantModule, cali_data: torch
                 a_para += [layer.act_quantizer_0.delta]
                 layer.act_quantizer.is_training = True
                 layer.act_quantizer_0.is_training = True
+
     w_opt, a_opt = None, None
     a_scheduler, w_scheduler = None, None
     if len(w_para) != 0:
@@ -95,7 +85,6 @@ def layer_reconstruction(model: QuantModel, layer: QuantModule, cali_data: torch
         a_opt = torch.optim.Adam(a_para, lr=lr_a)
         a_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(a_opt, T_max=iters, eta_min=0.)
 
-    # loss_mode = 'relaxation'
     loss_mode = 'none'
     rec_loss = opt_mode
     loss_func = LossFunction(layer, round_loss=loss_mode, weight=weight,
@@ -105,23 +94,13 @@ def layer_reconstruction(model: QuantModel, layer: QuantModule, cali_data: torch
     '''get input and set scale'''
     Resblock, cached_inps, cached_outs = save_inp_oup_data(model, layer, cali_data, asym, act_quant, batch_size=32, input_prob=True, keep_gpu=keep_gpu)
 
-    # if opt_mode != 'mse':
-    #     cached_grads = save_grad_data(model, layer, cali_data, act_quant, batch_size=batch_size)
-    # else:
-    #     cached_grads = None
-
     device = 'cuda'
-    # sz = cached_inps[0].size(0)
     sz = cached_outs.size(0)
     model.block_count = model.block_count + 1
     out_loss_list = []
-    # batch_size = 256
     for i in range(iters):
-        # idx = torch.randint(0, sz, (batch_size,))
         idx = random.sample(range(sz), batch_size)
-        # cur_inp = cached_inps[idx].to(device)
         cur_out = cached_outs[idx].to(device)
-        # cur_grad = cached_grads[idx] if opt_mode != 'mse' else None
         cur_inp, cur_sym = cached_inps[0][idx].to(device), cached_inps[1][idx].to(device)
         if input_prob < 1.0:
             cur_inp = torch.where(torch.rand_like(cur_inp) < input_prob, cur_inp, cur_sym)

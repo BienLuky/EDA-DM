@@ -5,6 +5,8 @@ from .quant_block import BaseQuantBlock, QuantAttnBlock, QuantSMVMatMul, QuantQK
 from .quant_model import QuantModel
 from typing import Union
 from ldm.models.diffusion.ddim import DDIMSampler
+import logging
+logger = logging.getLogger(__name__)
 
 def set_act_quantize_params_LDM(
     module,
@@ -12,9 +14,7 @@ def set_act_quantize_params_LDM(
     args,
     batch_size: int = 32,
 ):
-
-
-    print(f"set_act_quantize_params")
+    logger.info(f"set_act_quantize_params")
     module.model.diffusion_model.set_quant_state(True, True)
 
     for m in module.model.diffusion_model.modules():
@@ -35,8 +35,8 @@ def set_act_quantize_params_LDM(
         if isinstance(m, QuantQKMatMul):
             m.act_quantizer_k.set_inited(False)
             m.act_quantizer_q.set_inited(False)
+            
     """set or init step size and zero point in the activation quantizer"""
-
     batch_size = min(batch_size, cali_data[0].size(0))
     shape = [batch_size,
              module.model.diffusion_model.in_channels,
@@ -73,7 +73,7 @@ def set_act_quantize_params_LDM(
             m.act_quantizer_q.set_inited(True)
 
 def set_weight_quantize_params_LDM(model, cali_data, args):
-    print(f"set_weight_quantize_params")
+    logger.info(f"set_weight_quantize_params")
     model.model.diffusion_model.set_quant_state(True, False)
 
     for name, module in model.model.diffusion_model.named_modules():
@@ -85,6 +85,7 @@ def set_weight_quantize_params_LDM(model, cali_data, args):
              model.model.diffusion_model.in_channels,
              model.model.diffusion_model.image_size,
              model.model.diffusion_model.image_size]
+
     ddim = DDIMSampler(model)
     bs = shape[0]
     shape = shape[1:]

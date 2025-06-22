@@ -393,6 +393,8 @@ class Quantupsample_resnet_down(BaseQuantBlock):
         self.use_act_quant = act_quant
         self.QuantResnetBlock.set_quant_state(weight_quant, act_quant)
         self.upsample.conv.set_quant_state(weight_quant, act_quant)
+
+        
 class QuantAttnBlock(BaseQuantBlock):
     def __init__(
         self, attn: AttnBlock, act_quant_params: dict = {}, sm_abit=8):

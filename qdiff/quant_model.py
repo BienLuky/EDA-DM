@@ -72,11 +72,8 @@ class QuantModel(nn.Module):
     def set_grad_ckpt(self, grad_ckpt: bool):
         for name, m in self.model.named_modules():
             if isinstance(m, (QuantBasicTransformerBlock, BasicTransformerBlock)):
-                # logger.info(name)
                 m.checkpoint = grad_ckpt
-            # elif isinstance(m, QuantResBlock):
-                # logger.info(name)
-                # m.use_checkpoint = grad_ckpt
+
     def set_first_last_layer_to_8bit(self):
         w_list, a_list = [], []
         for name, module in self.model.named_modules():
@@ -97,18 +94,3 @@ class QuantModel(nn.Module):
                 module_list += [m]
         module_list[-1].disable_act_quant = True
 
-    def set_cosine_embedding_layer_to_32bit(self):
-        w_list, a_list = [], []
-        for module in self.model.modules():
-            if isinstance(module, UniformAffineQuantizer):
-                if module.leaf_param:
-                    a_list.append(module)
-                else:
-                    w_list.append(module)
-        w_list[0].bitwidth_refactor(32)
-        a_list[0].bitwidth_refactor(32)
-        # a_list[1].bitwidth_refactor(32)
-        # a_list[2].bitwidth_refactor(32)
-        w_list[-1].bitwidth_refactor(8)
-        "the image input has been in 0~255, set the last layer's input to 8-bit"
-        a_list[-2].bitwidth_refactor(8)

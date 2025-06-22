@@ -15,7 +15,7 @@ def block_reconstruction(model: QuantModel, block: BaseQuantBlock, cali_data: to
                          asym: bool = False, b_range: tuple = (20, 2),
                          warmup: float = 0.0, act_quant: bool = False, lr_a: float = 4e-5, lr_w=1e-2, p: float = 2.0,
                          input_prob: float = 1.0, keep_gpu: bool = True, 
-                         recon_w: bool = False, recon_a: bool = False, add_loss: float = 0.0, change_block: bool = False):
+                         recon_w: bool = False, recon_a: bool = False, add_loss: float = 0.0):
     """
     Block reconstruction to optimize the output from each block.
 
@@ -36,7 +36,6 @@ def block_reconstruction(model: QuantModel, block: BaseQuantBlock, cali_data: to
     """
 
     '''set state'''                                    
-    # model.set_quant_state(False, False)
     block.set_quant_state(True, act_quant)
     round_mode = 'learned_hard_sigmoid'
     hooks = []
@@ -63,6 +62,7 @@ def block_reconstruction(model: QuantModel, block: BaseQuantBlock, cali_data: to
                     module.weight_quantizer_0.soft_targets = True
                     w_para += [module.weight_quantizer.alpha]
                     w_para += [module.weight_quantizer_0.alpha]
+
         '''activation'''
         if isinstance(module, (QuantModule, BaseQuantBlock)):
             if act_quant and isinstance(module, QuantAttnBlock):
@@ -120,7 +120,6 @@ def block_reconstruction(model: QuantModel, block: BaseQuantBlock, cali_data: to
                         module.act_quantizer.is_training = True
                         module.act_quantizer_0.is_training = True
         
-
     w_opt, a_opt = None, None
     a_scheduler, w_scheduler = None, None
     if len(w_para) != 0:
@@ -130,35 +129,22 @@ def block_reconstruction(model: QuantModel, block: BaseQuantBlock, cali_data: to
         a_opt = torch.optim.Adam(a_para, lr=lr_a)
         a_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(a_opt, T_max=iters, eta_min=0.)
 
-    # loss_mode = 'relaxation'
     loss_mode = 'none'
     rec_loss = opt_mode
     loss_func = LossFunction(block, round_loss=loss_mode, weight=weight,
                              max_count=iters, rec_loss=rec_loss, b_range=b_range,
                              decay_start=0, warmup=warmup, p=p)
 
-
     '''get input and set scale'''
     Resblock, cached_inps, cached_outs = save_inp_oup_data(model, block, cali_data, asym, act_quant, batch_size=batch_size, input_prob=True, keep_gpu=keep_gpu)
 
-    # if opt_mode != 'mse':
-    #     cached_grads = save_grad_data(model, block, cali_data, act_quant, batch_size=batch_size)
-    # else:
-    #     cached_grads = None
-
     device = 'cuda'
-    # sz = cached_inps.size(0)
     sz = cached_outs.size(0)
     model.block_count = model.block_count + 1
-    module_loss_list = []
-    out_loss_list = []
-    # batch_size = 256
     for i in range(iters):
-        # idx = torch.randint(0, sz, (batch_size,))
         idx = random.sample(range(sz), batch_size)
-        # cur_inp = cached_inps[idx].to(device)
         cur_out = cached_outs[idx].to(device)
-        # cur_grad = cached_grads[idx] if opt_mode != 'mse' else None
+
         if Resblock:
             cur_inp, cur_sym = cached_inps[0][0][idx].to(device), cached_inps[1][0][idx].to(device)
             temb_cur_inp, temb_cur_sym = cached_inps[0][1][idx].to(device), cached_inps[1][1][idx].to(device)
@@ -182,49 +168,37 @@ def block_reconstruction(model: QuantModel, block: BaseQuantBlock, cali_data: to
         m_loss = 0.0
         if len(hooks) != 0:
             if Resblock:
-                # module全精度的输入输出
+                # fp module
                 block.set_quant_state(False, False)
                 r_out = block(cur_sym, temb_cur_sym)
                 module_r = []
                 for j in range(len(hooks)):
                     module_r.append(hooks[j].out)
-                # module重建量化后的输入输出
+                # quant module
                 block.set_quant_state(True, act_quant)
                 q_out = block(cur_inp, temb_cur_inp)
                 module_q = []
                 for j in range(len(hooks)):
                     module_q.append(hooks[j].out)
             else:
-                # module全精度的输入输出
+                # fp module
                 block.set_quant_state(False, False)
                 r_out = block(cur_sym)
                 module_r = []
                 for j in range(len(hooks)):
                     module_r.append(hooks[j].out)
-                # module重建量化后的输入输出
+                # quant module
                 block.set_quant_state(True, act_quant)
                 q_out = block(cur_inp)
                 module_q = []
                 for j in range(len(hooks)):
                     module_q.append(hooks[j].out)
             
-            module_loss_list.append(lp_loss(module_q[0], module_r[0], p=2).cpu().detach().numpy())
-            m_loss_list = []
             for j in range(len(module_r)-1):
                 loss_module = lp_loss(module_q[j], module_r[j], p=2)
                 m_loss = m_loss + loss_module
-                m_loss_list.append(loss_module)
-
-        # if (i+1) == iters or (i+1) == 1:
-        #    if len(m_loss_list)==3:
-        #        print('m loss:  {:.3f}   {:.3f}   {:.3f}   sum = {:.3f}'.format(float(m_loss_list[0]), float(m_loss_list[1]), float(m_loss_list[2]), float(torch.tensor(m_loss_list).sum())))
-        #    elif len(m_loss_list)==4:
-        #        print('m loss:  {:.3f}   {:.3f}   {:.3f}   {:.3f}   sum = {:.3f}'.format(float(m_loss_list[0]), float(m_loss_list[1]), float(m_loss_list[2]), float(m_loss_list[3]), float(torch.tensor(m_loss_list).sum())))
-        #    else:
-        #        print('what?')
 
         block_loss = loss_func(out_quant, cur_out)
-        out_loss_list.append(block_loss.cpu().detach().numpy())
         loss = block_loss + add_loss * m_loss
         del r_out, module_r, q_out, module_q, cur_inp, cur_sym
         loss.backward()#retain_graph=True
@@ -238,25 +212,6 @@ def block_reconstruction(model: QuantModel, block: BaseQuantBlock, cali_data: to
         if a_scheduler:
             a_scheduler.step()
     torch.cuda.empty_cache()
-
-    if add_loss != 0:
-        road = "/home/liuxuewen/Dome/q-diffusion/result/add_loss/"
-    else:
-        road = "/home/liuxuewen/Dome/q-diffusion/result/no_add_loss/"
-    if change_block:
-        road = "/home/liuxuewen/Dome/q-diffusion/result/change_block/"
-    else:
-        road = "/home/liuxuewen/Dome/q-diffusion/result/no_change_block/"
-    if len(hooks) != 0:
-        x = range(len(module_loss_list))
-        f = plt.figure()
-        plt.plot(x, module_loss_list)
-        plt.savefig(road + f"moduleloss_{model.block_count}.png")
-
-        x = range(len(out_loss_list))
-        f = plt.figure()
-        plt.plot(x, out_loss_list)
-        plt.savefig(road + f"outloss_{model.block_count}.png")
 
     for module in block.modules():
         if isinstance(module, QuantModule):
@@ -283,6 +238,7 @@ def block_reconstruction(model: QuantModel, block: BaseQuantBlock, cali_data: to
             module.attn2.act_quantizer_k.is_training = False
             module.attn2.act_quantizer_v.is_training = False
             module.attn2.act_quantizer_w.is_training = False 
+
     for hook in hooks:
         hook.remove()
 

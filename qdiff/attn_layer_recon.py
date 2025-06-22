@@ -15,7 +15,7 @@ def AttnBlock_layer_reconstruction(model: QuantModel, block: BaseQuantBlock, cal
                          asym: bool = False, b_range: tuple = (20, 2),
                          warmup: float = 0.0, act_quant: bool = False, lr_a: float = 4e-5, lr_w=1e-2, p: float = 2.0,
                          input_prob: float = 1.0, keep_gpu: bool = True, 
-                         recon_w: bool = False, recon_a: bool = False, add_loss: float = 0.0, layer_loss: bool = False, change_block: bool = False):
+                         recon_w: bool = False, recon_a: bool = False, add_loss: float = 0.0, layer_loss: bool = False):
     """
     Block reconstruction to optimize the output from each block.
 
@@ -36,7 +36,6 @@ def AttnBlock_layer_reconstruction(model: QuantModel, block: BaseQuantBlock, cal
     """
 
     '''set state'''                                    
-    # model.set_quant_state(False, False)
     block.set_quant_state(True, act_quant)
     round_mode = 'learned_hard_sigmoid'
 
@@ -44,8 +43,6 @@ def AttnBlock_layer_reconstruction(model: QuantModel, block: BaseQuantBlock, cal
     # Replace weight quantizer to AdaRoundQuantizer
     w_para, a_para = [], []
     for module in block.modules():
-        '''weight'''
-
         '''activation'''
         if isinstance(module, (QuantModule, BaseQuantBlock)):
             if act_quant and isinstance(module, QuantAttnBlock):
@@ -84,29 +81,20 @@ def AttnBlock_layer_reconstruction(model: QuantModel, block: BaseQuantBlock, cal
     '''get input and set scale'''
     Resblock, cached_inps, cached_outs = save_inp_oup_data(model, block, cali_data, asym, act_quant, batch_size=32, input_prob=True, keep_gpu=keep_gpu)
 
-    # if opt_mode != 'mse':
-    #     cached_grads = save_grad_data(model, block, cali_data, act_quant, batch_size=batch_size)
-    # else:
-    #     cached_grads = None
-
     device = 'cuda'
-    # sz = cached_inps.size(0)
     sz = cached_outs.size(0)
     model.block_count = model.block_count + 1
     module_loss_list = []
     out_loss_list = []
-    # batch_size = 256
     for i in range(iters):
-        # idx = torch.randint(0, sz, (batch_size,))
         idx = random.sample(range(sz), batch_size)
-        # cur_inp = cached_inps[idx].to(device)
         cur_out = cached_outs[idx].to(device)
-        # cur_grad = cached_grads[idx] if opt_mode != 'mse' else None
         if Resblock:
             cur_inp, cur_sym = cached_inps[0][0][idx].to(device), cached_inps[1][0][idx].to(device)
             temb_cur_inp, temb_cur_sym = cached_inps[0][1][idx].to(device), cached_inps[1][1][idx].to(device)
         else:
             cur_inp, cur_sym = cached_inps[0][idx].to(device), cached_inps[1][idx].to(device)
+        
         if input_prob < 1.0:
             rand = torch.rand_like(cur_inp)
             cur_inp = torch.where(rand < input_prob, cur_inp, cur_sym)
@@ -136,20 +124,6 @@ def AttnBlock_layer_reconstruction(model: QuantModel, block: BaseQuantBlock, cal
         if a_scheduler:
             a_scheduler.step()
     torch.cuda.empty_cache()
-
-    if add_loss != 0:
-        road = "/home/liuxuewen/Dome/q-diffusion/result/add_loss/"
-    else:
-        road = "/home/liuxuewen/Dome/q-diffusion/result/no_add_loss/"
-    if change_block:
-        road = "/home/liuxuewen/Dome/q-diffusion/result/change_block/"
-    else:
-        road = "/home/liuxuewen/Dome/q-diffusion/result/no_change_block/"
-
-    x = range(len(out_loss_list))
-    f = plt.figure()
-    plt.plot(x, out_loss_list)
-    plt.savefig(road + f"outloss_{model.block_count}.png")
 
     for module in block.modules():
         if isinstance(module, QuantAttnBlock):
