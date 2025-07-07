@@ -10,16 +10,16 @@
 </h5>
 
 
-## Introduction
+## 📖Introduction
 EDA-DM is a novel post-training quantization method for accelerating diffusion models. In the low-bit cases, it maintains high-quality image generation without any computational overhead. 
 To address the distribution mismatch issues at both calibration sample level and reconstruction output level, we propose TDAC to address the calibration sample level mismatch, and propose FBR to eliminate the reconstruction output level mismatch.
 
-- Challenges
+🔹Challenges
 <div align=center>
   <img src="assets/challenge.png" width="100%" />
 </div>
 
-- Overview Methods
+🔹Overview Methods
 <div align=center>
   <img src="assets/struction.png" width="100%" />
 </div>
@@ -27,9 +27,9 @@ To address the distribution mismatch issues at both calibration sample level and
 
 *This repository provides the official implementation for EDA-DM **calibration, training, inference, and evaluation without any reservation.***
 
-## Getting Started
+## 🔓Getting Started
 
-### Installation
+### 🗝️Installation
 
 Clone this repository, and then create and activate a suitable conda environment named `EDA-DM` by using the following command:
 
@@ -40,7 +40,7 @@ conda env create -f env.yaml
 conda activate EDA-DM
 ```
 
-### Usage
+### 🔧Usage
 
 1. For Latent Diffusion and Stable Diffusion experiments, first download relevant checkpoints following the instructions in the [latent-diffusion](https://github.com/CompVis/latent-diffusion#model-zoo) and [stable-diffusion](https://github.com/CompVis/stable-diffusion#weights) repos from CompVis. We currently use `sd-v1-4.ckpt` for Stable Diffusion. 
 
@@ -63,7 +63,7 @@ bash scripts/for_imagenet.sh
 bash scripts/for_coco.sh
 ```
 
-### EDA-DM Weights
+### 💠EDA-DM Weights
 Here, we provide some EDA-DM quantized weights.
 Due to the space limitations of Google Drive we only provide partial weights.
 
@@ -73,21 +73,21 @@ Due to the space limitations of Google Drive we only provide partial weights.
 |  LDM-4  | ImageNet | W4A8 | [link](https://drive.google.com/file/d/1xqkm7hcuOfMby0VhMIZcY3iOkDfnFmaG/view?usp=drive_link) |
 
 
-### Evaluation
+### 📝Evaluation
 We provide the evaluation code in `scripts/test.py`. But before using it you need to download [torch-fidelity](https://github.com/toshas/torch-fidelity), [pytorch-fid](https://github.com/mseitzer/pytorch-fid) and [clip-score](https://github.com/Taited/clip-score) to `EDA-DM`.
 
-## Details
+## 🔍Details
 
 EDA-DM follows a standard post-training quantization (PTQ) pipeline, which first collects a small calibration and then optimizes quantization parameters via reconstruction-based training. Notably, many existing approaches design time-step quantization parameters for diffusion models, which significantly improve performance but at the cost of deployment efficiency. **In contrast, our method adopts a single quantization parameter shared across all diffusion steps.** Experiments demonstrate that EDA-DM not only achieves superior quantization performance but also maintains high deployment efficiency.
 
-## Deployment
+## 🛠️Deployment
 The quantized models are deployed by utilizing [CUTLASS](https://github.com/NVIDIA/cutlass) and the same deployment toolkit of [SmoothQuant](https://github.com/mit-han-lab/smoothquant). 
 The specifical implementation is based on the open-source project [torch_quantizer](https://github.com/ThisisBillhe/torch_quantizer).
 
 
-## Result
+## 📊Result
 
-### Random samples 
+### 🔹Random samples 
   <details>
   <summary> Stable-Diffusion (1.83× Acceleration)</summary>
   <div align=center>
@@ -130,7 +130,7 @@ The specifical implementation is based on the open-source project [torch_quantiz
 
 
 
-### Compression and Speedup
+### 🔹Compression and Speedup
 We deploy the quantized models on RTX 3090 GPU, CPU, and ARM.
   <div align=center>
     <img src="assets/compression.png" width="48%" />
@@ -138,13 +138,13 @@ We deploy the quantized models on RTX 3090 GPU, CPU, and ARM.
   </div>
 
 
-## Acknowledgments
+## 💙Acknowledgments
 
 This code was developed based on [Q-diffusion](https://github.com/Xiuyu-Li/q-diffusion) and [BRECQ](https://github.com/yhhhli/BRECQ). 
 We thank [torch_quantizer](https://github.com/ThisisBillhe/torch_quantizer) for providing the reference to deploy our quantized model and measure acceleration. We also thank [torch-fidelity](https://github.com/toshas/torch-fidelity), [pytorch-fid](https://github.com/mseitzer/pytorch-fid), and [clip-score](https://github.com/Taited/clip-score) for IS, sFID, FID and CLIP score computation.
 
 
-## Citation
+## 📚Citation
 
 If you find this work useful in your research, please consider citing our paper:
 
